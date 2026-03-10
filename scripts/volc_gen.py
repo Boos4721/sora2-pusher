@@ -24,7 +24,10 @@ class VolcengineVideoGenerator:
             "prompt": prompt,
             "duration": duration,
             "resolution": resolution,
-            "fps": 24
+            "fps": 24,
+            "logo_info": {
+                "add_logo": False # 显式请求不添加水印/Logo
+            }
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",

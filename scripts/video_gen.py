@@ -21,7 +21,8 @@ class VideoGenerator:
             "model": model,
             "prompt": prompt,
             "duration": duration,
-            "resolution": resolution
+            "resolution": resolution,
+            "no_watermark": True  # 尝试请求去水印版本
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",
