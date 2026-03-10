@@ -13,10 +13,10 @@ class VideoGenerator:
         if not self.api_key:
             raise ValueError("SEEDANCE_API_KEY is not set. Please configure it via environment variables.")
 
-    def generate(self, prompt: str, model: str = "bytedance/seedance-v1.5-pro/text-to-video", 
+    def generate(self, prompt: str, model: str = "openai/sora-2", 
                  duration: int = 10, resolution: str = "1080p") -> str:
         """提交视频生成任务"""
-        print(f"🚀 发起视频生成任务: {prompt[:50]}...")
+        print(f"🚀 发起视频生成任务 ({model}): {prompt[:50]}...")
         payload = {
             "model": model,
             "prompt": prompt,
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sora/Seedance Video Generator CLI")
     parser.add_argument("--prompt", required=True, help="Video generation prompt")
     parser.add_argument("--output", default="output.mp4", help="Output filename")
-    parser.add_argument("--model", default="bytedance/seedance-v1.5-pro/text-to-video")
+    parser.add_argument("--model", default="openai/sora-2")
     parser.add_argument("--duration", type=int, default=10)
     parser.add_argument("--resolution", default="1080p")
     
