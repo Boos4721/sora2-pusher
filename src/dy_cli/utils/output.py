@@ -185,17 +185,23 @@ def print_trending(items: list[dict]):
     table.add_column("热度", justify="right", width=10)
     table.add_column("标签", width=10)
 
+    LABEL_MAP = {0: "", 1: "新", 2: "热", 3: "爆", 4: "独家"}
+
     for i, item in enumerate(items, 1):
         title = item.get("word", item.get("title", "-"))
         hot = _fmt_count(item.get("hot_value", item.get("view_count", "-")))
-        label = item.get("label", item.get("tag", ""))
+        raw_label = item.get("label", item.get("tag", ""))
+        if isinstance(raw_label, int):
+            label = LABEL_MAP.get(raw_label, str(raw_label))
+        else:
+            label = str(raw_label)
 
         # Top 3 colored
         rank_style = "bold red" if i <= 3 else "dim"
         table.add_row(
             Text(str(i), style=rank_style),
-            title,
-            hot,
+            str(title),
+            str(hot),
             label,
         )
 

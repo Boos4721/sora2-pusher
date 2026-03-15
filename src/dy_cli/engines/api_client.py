@@ -41,6 +41,12 @@ LIVE_INFO_URL = f"{API_DOMAIN}/webcast/room/web/enter/"
 FEED_URL = f"{API_DOMAIN}/aweme/v1/web/tab/feed/"
 SUGGEST_URL = f"{API_DOMAIN}/aweme/v1/web/api/suggest_words/"
 
+# iesdouyin API (share API, more stable, less anti-crawl)
+IESDOUYIN_DETAIL_URL = "https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/"
+
+# ttwid registration
+TTWID_URL = "https://ttwid.bytedance.com/ttwid/union/register/"
+
 # Share URL pattern
 SHARE_URL_PATTERN = re.compile(
     r"https?://(?:www\.)?(?:douyin\.com|iesdouyin\.com)/(?:video|note|share/video)/(\d+)"
@@ -87,7 +93,27 @@ class DouyinAPIClient:
                 follow_redirects=True,
                 **transport_kwargs,
             )
+            self._init_cookies()
         return self._client
+
+    def _init_cookies(self):
+        """获取 ttwid 等必要 cookie。"""
+        try:
+            self._client.post(
+                TTWID_URL,
+                json={
+                    "region": "cn",
+                    "aid": 1768,
+                    "needFid": False,
+                    "service": "www.douyin.com",
+                    "migrate_info": {"ticket": "", "source": "node"},
+                    "cbUrlProtocol": "https",
+                    "union": True,
+                },
+                headers={"Content-Type": "application/json"},
+            )
+        except Exception:
+            pass
 
     def _get(self, url: str, params: dict | None = None, **kwargs) -> dict:
         """发起 GET 请求并返回 JSON。"""
@@ -95,6 +121,8 @@ class DouyinAPIClient:
         try:
             resp = self.client.get(url, params=params, headers=headers, **kwargs)
             resp.raise_for_status()
+            if not resp.content:
+                raise DouyinAPIError(f"空响应 (可能需要登录或签名): {url.split('/')[-2]}")
             data = resp.json()
             return data
         except httpx.HTTPStatusError as e:
@@ -164,19 +192,39 @@ class DouyinAPIClient:
         if match:
             return match.group(1)
 
-        # Short URL — follow redirect
+        # Short URL — follow redirect (don't auto-follow, check 302 location)
         if SHORT_URL_PATTERN.match(url):
             try:
-                resp = self.client.get(
-                    url,
-                    headers=get_headers(),
-                    follow_redirects=True,
-                )
-                match = SHARE_URL_PATTERN.search(str(resp.url))
+                # Step 1: Don't follow redirects, get 302 Location header
+                no_follow = httpx.Client(follow_redirects=False, timeout=self.timeout)
+                resp = no_follow.get(url, headers=get_headers())
+                no_follow.close()
+
+                location = resp.headers.get("location", "")
+                match = SHARE_URL_PATTERN.search(location)
                 if match:
                     return match.group(1)
+
+                # Step 2: If redirected to homepage, try following with full client
+                resp2 = self.client.get(url, headers=get_headers())
+                final_url = str(resp2.url)
+                match = SHARE_URL_PATTERN.search(final_url)
+                if match:
+                    return match.group(1)
+
+                # Step 3: Search in response body for video ID pattern
+                body = resp2.text[:50000]
+                match = re.search(r'(?:video|aweme)[/_]?(?:id)?[=:/](\d{15,})', body)
+                if match:
+                    return match.group(1)
+
             except Exception:
                 pass
+
+        # Try extracting numbers that look like aweme_id from the URL itself
+        match = re.search(r'/(\d{15,})', url)
+        if match:
+            return match.group(1)
 
         raise DouyinAPIError(f"无法从链接提取视频 ID: {url}")
 
@@ -233,23 +281,82 @@ class DouyinAPIClient:
     # ------------------------------------------------------------------
 
     def get_video_detail(self, aweme_id: str) -> dict:
-        """获取视频详情。"""
-        params = {
-            **get_base_params(),
-            "aweme_id": aweme_id,
-        }
-        data = self._get(VIDEO_DETAIL_URL, params=params)
+        """获取视频详情（自动 fallback 到 share API）。"""
+        # Primary: Web API
+        try:
+            params = {
+                **get_base_params(),
+                "aweme_id": aweme_id,
+            }
+            data = self._get(VIDEO_DETAIL_URL, params=params)
+            if data.get("status_code") == 0:
+                aweme_detail = data.get("aweme_detail", {})
+                if aweme_detail:
+                    return aweme_detail
+        except DouyinAPIError:
+            pass
 
-        if data.get("status_code") != 0:
+        # Fallback: iesdouyin share API (更稳定，无签名要求)
+        return self._get_detail_via_share(aweme_id)
+
+    def _get_detail_via_share(self, aweme_id: str) -> dict:
+        """通过 iesdouyin share 页面 SSR 数据获取详情。"""
+        headers = get_headers()
+        headers["User-Agent"] = (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1"
+        )
+        try:
+            resp = self.client.get(
+                f"https://www.iesdouyin.com/share/video/{aweme_id}/",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            text = resp.text
+
+            # Extract _ROUTER_DATA from SSR page
+            idx = text.find("_ROUTER_DATA")
+            if idx < 0:
+                raise DouyinAPIError(f"无法从分享页提取数据: {aweme_id}")
+
+            start = text.find("{", idx)
+            if start < 0:
+                raise DouyinAPIError(f"无法解析分享页数据: {aweme_id}")
+
+            depth = 0
+            end = start
+            for i, c in enumerate(text[start:start + 50000]):
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        end = start + i + 1
+                        break
+
+            raw = text[start:end].replace("\\u002F", "/")
+            data = json.loads(raw)
+            loader = data.get("loaderData", {})
+
+            # Find the video page data
+            for key, val in loader.items():
+                if isinstance(val, dict):
+                    video_res = val.get("videoInfoRes", {})
+                    if isinstance(video_res, dict):
+                        items = video_res.get("item_list", [])
+                        if items:
+                            return items[0]
+
+            # item_list empty = overseas IP blocked
             raise DouyinAPIError(
-                f"获取详情失败: {data.get('status_msg', 'unknown error')}"
+                f"视频数据为空 (可能需要国内 IP/代理): {aweme_id}\n"
+                "  提示: dy config set api.proxy http://your-proxy:port"
             )
 
-        aweme_detail = data.get("aweme_detail", {})
-        if not aweme_detail:
-            raise DouyinAPIError(f"视频不存在: {aweme_id}")
-
-        return aweme_detail
+        except httpx.RequestError as e:
+            raise DouyinAPIError(f"请求失败: {e}") from e
+        except json.JSONDecodeError as e:
+            raise DouyinAPIError(f"JSON 解析失败: {e}") from e
 
     # ------------------------------------------------------------------
     # Comments
