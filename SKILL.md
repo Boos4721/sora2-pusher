@@ -36,15 +36,18 @@ AI 视频生成与社交媒体自动化发布技能。集成火山引擎 Seedanc
 1. **模型与参数选择**：
    - 用户可用自然语言指定模型（如“用即梦3.0”、“用豆包Seedance”、“用Sora”等）。如果用户没有指定，默认推荐使用“即梦AI 3.0 Pro”。
    - **非常重要**：在执行生成任务前，务必检查对话历史中是否已经提供了对应的 API 凭证。如果对话中已经有 API Key 或 AK/SK，请直接提取并在命令行中传入，**不要**再向用户询问。只有在对话历史和环境变量中都找不到所需凭证时，才向用户索要。
-2. **生成流程 - 即梦AI (支持 3.0 Pro / 720P / 1080P)**：
-   - **文生视频**：`python3 ~/.openclaw/skills/sora-pusher/scripts/jimeng_gen.py --model [pro|720p|1080p] --ak "[自动提取或询问的AK]" --sk "[自动提取或询问的SK]" --prompt "[提示词]"`
-   - **图生视频 (仅限 Pro)**：在使用 `--model pro` 时，追加 `--image_url "[图片链接]"` 或是 `--image_path "[本地图片路径]"`。
+3. **处理用户上传的图片 (多模态适配)**：
+   - 核心系统 (如 OpenClaw) 接收飞书、Telegram 等渠道的用户消息时，可能会包含图片附件。
+   - **非常重要**：如果用户随消息上传了图片附件，Agent 需要读取该附件的本地路径，并将此路径作为 `--image_path` 传入生成脚本，从而触发图生视频逻辑。
+4. **生成流程 - 即梦AI (支持 3.0 Pro / 720P / 1080P)**：
+   - **文生视频**：`python3 ~/.openclaw/skills/sora-pusher/scripts/jimeng_gen.py --model [pro|720p|1080p] --ak "[AK]" --sk "[SK]" --prompt "[提示词]"`
+   - **图生视频 (仅限 Pro)**：在使用 `--model pro` 时，追加 `--image_url "[图片链接]"` 或是 `--image_path "[附件的本地图片路径]"`。
    - 时长默认为 5 秒，支持 `--duration 10`。
-3. **生成流程 - 火山引擎 Seedance**：
-   - **文生视频**：`python3 ~/.openclaw/skills/sora-pusher/scripts/volc_gen.py --api_key "[自动提取或询问的API_KEY]" --prompt "[提示词]" --endpoint "[推理终端ID]"`
-   - **图生视频**：追加 `--image_url "[图片链接]"` 参数。
-4. **发布流程**：生成成功并下载后（脚本输出 `RESULT_PATH:[路径]`），自动调用 `pinchtab` 命令行或 API 闭环执行上传与发布指令 (见 `references/douyin_publish.md`)。
-5. **超时与重试**：默认超时 900 秒，自动处理异步状态轮询。
+5. **生成流程 - 火山引擎 Seedance**：
+   - **文生视频**：`python3 ~/.openclaw/skills/sora-pusher/scripts/volc_gen.py --api_key "[API_KEY]" --prompt "[提示词]" --endpoint "[推理终端ID]"`
+   - **图生视频**：追加 `--image_url "[图片链接]"` 或是 `--image_path "[附件的本地图片路径]"`。
+6. **发布流程**：生成成功并下载后（脚本输出 `RESULT_PATH:[路径]`），自动调用 `pinchtab` 命令行或 API 闭环执行上传与发布指令 (见 `references/douyin_publish.md`)。
+7. **超时与重试**：默认超时 900 秒，自动处理异步状态轮询。
 
 ## 📖 使用示例
 - "用即梦3.0 Pro生成一段赛博朋克风格的视频并发布到抖音，标题是：AI 浪潮"

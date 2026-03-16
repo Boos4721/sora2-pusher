@@ -6,6 +6,10 @@ import argparse
 from typing import Optional
 
 
+import base64
+import mimetypes
+
+
 class VolcengineVideoGenerator:
     """火山引擎 (Volcengine) Seedance 视频生成核心类 (适配最新 /contents/generations/tasks 接口)"""
 
@@ -26,6 +30,7 @@ class VolcengineVideoGenerator:
         prompt: str,
         model_endpoint: str,
         image_url: Optional[str] = None,
+        image_path: Optional[str] = None,
         duration: int = 5,
     ) -> str:
         """提交视频生成任务"""
@@ -40,6 +45,16 @@ class VolcengineVideoGenerator:
         # 如果有 image_url，则为图生视频任务
         if image_url:
             content.append({"type": "image_url", "image_url": {"url": image_url}})
+        elif image_path:
+            if not os.path.exists(image_path):
+                raise FileNotFoundError(f"Image file not found: {image_path}")
+            mime_type, _ = mimetypes.guess_type(image_path)
+            if not mime_type:
+                mime_type = "image/jpeg"
+            with open(image_path, "rb") as f:
+                base64_data = base64.b64encode(f.read()).decode("utf-8")
+            data_uri = f"data:{mime_type};base64,{base64_data}"
+            content.append({"type": "image_url", "image_url": {"url": data_uri}})
 
         payload = {
             "model": model_endpoint,  # 此处通常是推理终端 ID 或模型名称
@@ -137,6 +152,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--image_url", default=None, help="图生视频的首帧图片 URL（选填）"
     )
+    parser.add_argument(
+        "--image_path", default=None, help="图生视频的首帧本地图片路径（选填）"
+    )
     parser.add_argument("--duration", type=int, default=5, help="视频时长 (默认 5 秒)")
     parser.add_argument("--output", default="output.mp4", help="下载文件的保存路径")
 
@@ -148,6 +166,7 @@ if __name__ == "__main__":
             prompt=args.prompt,
             model_endpoint=args.endpoint,
             image_url=args.image_url,
+            image_path=args.image_path,
             duration=args.duration,
         )
         url = gen.poll(tid)
