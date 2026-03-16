@@ -8,10 +8,10 @@ from typing import Optional
 class VideoGenerator:
     """Seedance 2.0 / Sora 2 视频生成核心类"""
     def __init__(self, api_key: Optional[str] = None, base_url: str = "https://api.atlascloud.ai/v1"):
-        self.api_key = api_key or os.getenv("SEEDANCE_API_KEY")
+        self.api_key = api_key or os.getenv("ATLAS_API_KEY")
         self.base_url = base_url
         if not self.api_key:
-            raise ValueError("SEEDANCE_API_KEY is not set. Please configure it via environment variables.")
+            raise ValueError("ATLAS_API_KEY is not set. Please configure it via environment variables.")
 
     def generate(self, prompt: str, model: str = "openai/sora-2", 
                  duration: int = 10, resolution: str = "1080p") -> str:

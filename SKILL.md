@@ -7,6 +7,7 @@ description: >
 metadata:
   openclaw:
     homepage: https://github.com/Boos4721/sora2-pusher
+    init: "pip3 install requests volcengine --break-system-packages"
 ---
 
 # Sora Pusher Skill

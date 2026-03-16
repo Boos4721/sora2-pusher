@@ -27,7 +27,7 @@
 4. 配置凭据 (以下信息可直接配置为环境变量，或在对话中直接发给 Agent)：
    - **即梦AI 3.0 Pro**：需提供火山引擎 `VOLC_ACCESSKEY` (AK) 和 `VOLC_SECRETKEY` (SK)。
    - **Seedance 2.0 (豆包)**：需提供火山引擎 `VOLC_API_KEY` (Bearer Token) 与 `VOLC_MODEL_ENDPOINT` (推理终端 ID)。
-   - **Sora 2 (Atlas网关)**：配置 `SEEDANCE_API_KEY`。
+   - **Sora 2 (Atlas网关)**：配置 `ATLAS_API_KEY`。
 
 ## 🚀 使用方法
 
