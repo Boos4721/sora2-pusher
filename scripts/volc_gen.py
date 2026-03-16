@@ -1,12 +1,11 @@
 import os
 import time
 import requests
-import json
 import argparse
 from typing import Optional
 
 class VolcengineVideoGenerator:
-    """火山引擎 (Volcengine) Seedance 2.0 视频生成核心类"""
+    """火山引擎 (Volcengine) Seedance 视频生成核心类 (适配最新 /contents/generations/tasks 接口)"""
     def __init__(self, api_key: Optional[str] = None, base_url: str = "https://ark.cn-beijing.volces.com/api/v3"):
         self.api_key = api_key or os.getenv("VOLC_API_KEY")
         self.base_url = base_url
@@ -14,46 +13,60 @@ class VolcengineVideoGenerator:
             raise ValueError("VOLC_API_KEY is not set. Please get it from Volcengine Ark console.")
 
     def generate(self, prompt: str, model_endpoint: str, 
-                 duration: int = 10, resolution: str = "1080p") -> str:
+                 image_url: Optional[str] = None,
+                 duration: int = 5) -> str:
         """提交视频生成任务"""
         print(f"🚀 [火山引擎] 发起视频生成任务: {prompt[:50]}...")
         
-        # 火山引擎 Ark API 结构
-        payload = {
-            "model": model_endpoint, # 此处通常是推理终端 ID
-            "prompt": prompt,
-            "duration": duration,
-            "resolution": resolution,
-            "fps": 24,
-            "logo_info": {
-                "add_logo": False # 显式请求不添加水印/Logo
+        # 将配置参数追加到 prompt 中
+        # 项目默认使用无水印生成，保证纯净素材
+        full_prompt = f"{prompt} --duration {duration} --watermark false"
+        
+        content = [
+            {
+                "type": "text",
+                "text": full_prompt
             }
+        ]
+        
+        # 如果有 image_url，则为图生视频任务
+        if image_url:
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": image_url
+                }
+            })
+            
+        payload = {
+            "model": model_endpoint, # 此处通常是推理终端 ID 或模型名称
+            "content": content
         }
+        
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
         }
         
-        # 实际 API Endpoint 请参考火山引擎最新文档，通常为 /video_generation/tasks
-        url = f"{self.base_url}/video_generation/tasks"
+        url = f"{self.base_url}/contents/generations/tasks"
         
         try:
             response = requests.post(url, headers=headers, json=payload)
             response.raise_for_status()
             data = response.json()
-            # 根据火山文档，返回可能在 id 或 task_id
+            
             task_id = data.get("id") or data.get("task_id")
             if not task_id:
                 raise Exception(f"Failed to get task_id: {data}")
             return task_id
         except requests.exceptions.RequestException as e:
-            raise Exception(f"Volcengine API Request failed: {str(e)}")
+            raise Exception(f"Volcengine API Request failed: {str(e)}\nResponse: {e.response.text if e.response else ''}")
 
     def poll(self, task_id: str, interval: int = 15, timeout: int = 900) -> str:
         """轮询任务状态"""
         start_time = time.time()
         headers = {"Authorization": f"Bearer {self.api_key}"}
-        url = f"{self.base_url}/video_generation/tasks/{task_id}"
+        url = f"{self.base_url}/contents/generations/tasks/{task_id}"
         
         while time.time() - start_time < timeout:
             try:
@@ -61,18 +74,16 @@ class VolcengineVideoGenerator:
                 response.raise_for_status()
                 result = response.json()
                 
-                # 火山 Ark 状态字段通常在 task_status 或 status
-                status = result.get("status") or result.get("task_status")
+                status = result.get("status")
                 
                 if status == "succeeded" or status == "completed":
-                    # 视频链接通常在 video_url 或 output 中
-                    video_url = result.get("video_url") or result.get("output", {}).get("video_url")
+                    video_url = result.get("content", {}).get("video_url") or result.get("video_url")
                     if not video_url:
                         raise Exception(f"Success but no video_url found: {result}")
                     print("\n✅ 视频生成成功!")
                     return video_url
-                elif status == "failed":
-                    error_msg = result.get("error_message") or result.get("reason") or "Unknown error"
+                elif status in ["failed", "error"]:
+                    error_msg = result.get("error", {}).get("message") or result.get("error_message") or result.get("reason") or "Unknown error"
                     raise Exception(f"❌ 视频生成失败: {error_msg}")
                 
                 elapsed = int(time.time() - start_time)
@@ -97,16 +108,24 @@ class VolcengineVideoGenerator:
         return save_path
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Volcengine Seedance 2.0 CLI")
-    parser.add_argument("--prompt", required=True)
+    parser = argparse.ArgumentParser(description="Volcengine Seedance CLI")
+    parser.add_argument("--api_key", default=None, help="火山引擎 API Key，若不传则读取 VOLC_API_KEY 环境变量")
+    parser.add_argument("--prompt", required=True, help="视频生成提示词")
     parser.add_argument("--endpoint", required=True, help="Your Model Endpoint ID from Volcengine Ark")
-    parser.add_argument("--output", default="output.mp4")
+    parser.add_argument("--image_url", default=None, help="图生视频的首帧图片 URL（选填）")
+    parser.add_argument("--duration", type=int, default=5, help="视频时长 (默认 5 秒)")
+    parser.add_argument("--output", default="output.mp4", help="下载文件的保存路径")
     
     args = parser.parse_args()
     
     try:
-        gen = VolcengineVideoGenerator()
-        tid = gen.generate(args.prompt, model_endpoint=args.endpoint)
+        gen = VolcengineVideoGenerator(api_key=args.api_key)
+        tid = gen.generate(
+            prompt=args.prompt, 
+            model_endpoint=args.endpoint,
+            image_url=args.image_url,
+            duration=args.duration
+        )
         url = gen.poll(tid)
         path = gen.download(url, args.output)
         print(f"RESULT_PATH:{path}")
