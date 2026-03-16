@@ -30,7 +30,7 @@ AI 视频生成与社交媒体自动化发布技能。集成火山引擎 Seedanc
 ## 🛠️ 配置要求
 - **火山引擎 Ark (Seedance)**: `VOLC_API_KEY` (API 密钥) 及 `VOLC_MODEL_ENDPOINT` (推理终端 ID)。
 - **即梦AI 3.0 Pro**: `VOLC_ACCESSKEY` (AK) 及 `VOLC_SECRETKEY` (SK)。
-- 登录状态：建议先执行 `pinchtab nav "https://creator.douyin.com/"` 进行一次手动扫码登录，登录后会持久化保存 profile。
+- 登录状态：如果系统尚未登录抖音，Agent 需要访问创作者中心，获取登录二维码的截图并回传给用户（如在飞书/TG中发回），等待用户扫码完成后再执行后续发布。PinchTab 会持久化保存 profile。
 
 ## 📝 核心规则 (Rules)
 1. **模型与参数选择**：
