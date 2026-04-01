@@ -151,6 +151,16 @@ from dy_cli.commands.dreamina import dreamina_group
 
 cli.add_command(dreamina_group, "dreamina")
 
+# 提示词优化
+from dy_cli.commands.prompt import prompt_group
+
+cli.add_command(prompt_group, "prompt")
+
+# 历史记录
+from dy_cli.commands.history import history_group
+
+cli.add_command(history_group, "history")
+
 
 def main():
     cli()

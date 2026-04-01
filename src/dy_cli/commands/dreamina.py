@@ -16,6 +16,7 @@ from typing import Any
 import click
 
 from dy_cli.utils.output import console, error, info, print_json, success, warning
+from dy_cli.utils.storage import save_generation_record, update_generation_status
 
 
 DREAMINA_INSTALL_URL = "https://jimeng.jianying.com/cli"
@@ -137,6 +138,33 @@ def _parse_json_output(output: str) -> Any | None:
         return None
     except json.JSONDecodeError:
         return None
+
+
+def _save_generation_task(
+    task_type: str,
+    prompt: str,
+    output: str | None,
+    metadata: dict | None = None,
+) -> None:
+    """保存生成任务到本地存储。"""
+    if not output:
+        return
+
+    data = _parse_json_output(output)
+    if not data:
+        return
+
+    submit_id = data.get("submit_id", "")
+    status = data.get("gen_status", "querying")
+
+    if submit_id:
+        save_generation_record(
+            task_type=task_type,
+            prompt=prompt,
+            submit_id=submit_id,
+            status=status,
+            metadata=metadata,
+        )
 
 
 @click.group("dreamina", help="🎨 即梦 AIGC 生成 (文生图/视频/图生视频)")
@@ -261,7 +289,8 @@ def dreamina_query(submit_id, as_json):
 @click.option("--model", default=None, help="模型版本 (3.0, 4.0, 4.5, 5.0, lab)")
 @click.option("--poll", type=int, default=0, help="轮询等待秒数")
 @click.option("--json-output", "as_json", is_flag=True, help="输出 JSON")
-def dreamina_text2image(prompt, ratio, resolution, model, poll, as_json):
+@click.option("--no-save", is_flag=True, help="不保存到历史记录")
+def dreamina_text2image(prompt, ratio, resolution, model, poll, as_json, no_save):
     """文本生成图片。"""
     args = ["text2image", f"--prompt={prompt}"]
     if ratio:
@@ -273,13 +302,21 @@ def dreamina_text2image(prompt, ratio, resolution, model, poll, as_json):
     if poll:
         args.append(f"--poll={poll}")
 
-    output = _run_dreamina(args, capture=as_json)
+    output = _run_dreamina(args, capture=as_json or not no_save)
     if output and as_json:
         data = _parse_json_output(output)
         if data:
             print_json(data)
         else:
             console.print(output)
+
+    if output and not no_save:
+        _save_generation_task(
+            "text2image",
+            prompt,
+            output,
+            {"ratio": ratio, "resolution": resolution, "model": model},
+        )
 
 
 @dreamina_group.command("text2video", help="文生视频")
