@@ -219,6 +219,45 @@ def dreamina_install():
         raise SystemExit(1)
 
 
+@dreamina_group.command("uninstall", help="卸载 dreamina CLI")
+@click.option("--yes", "-y", is_flag=True, help="确认卸载")
+def dreamina_uninstall(yes):
+    """卸载 dreamina CLI。"""
+    dreamina_path = shutil.which("dreamina")
+    if not dreamina_path:
+        info("dreamina CLI 未安装")
+        return
+
+    if not yes:
+        confirm = click.confirm(f"确定要卸载 dreamina CLI 吗？\n  路径: {dreamina_path}", default=False)
+        if not confirm:
+            info("已取消")
+            return
+
+    try:
+        os.remove(dreamina_path)
+        success(f"已卸载 dreamina CLI: {dreamina_path}")
+
+        # 也尝试删除 skill 文件
+        skill_path = os.path.expanduser("~/.dreamina_cli/dreamina/SKILL.md")
+        skill_dir = os.path.dirname(skill_path)
+        if os.path.exists(skill_path):
+            try:
+                os.remove(skill_path)
+                if os.path.exists(skill_dir):
+                    try:
+                        os.rmdir(skill_dir)
+                    except Exception:
+                        pass
+                info("已删除 dreamina skill 文件")
+            except Exception as e:
+                warning(f"删除 skill 文件失败: {e}")
+
+    except Exception as e:
+        error(f"卸载失败: {e}")
+        raise SystemExit(1)
+
+
 @dreamina_group.command("credit", help="查看账户余额")
 @click.option("--json-output", "as_json", is_flag=True, help="输出 JSON")
 def dreamina_credit(as_json):
